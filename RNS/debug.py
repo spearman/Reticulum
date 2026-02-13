@@ -12,4 +12,16 @@ def show_packet(packet):
     print(f"  address2: {bytes(packet.raw[18:34]).hex()}")
     b = 34
   print(f"  context: {packet.raw[b]}")
-  print(f"  data: {len(packet.raw[b+1:])} bytes")
+  b += 1
+  print(f"  data: {len(packet.raw[b:])} bytes")
+  print("  ---")
+  if packet.packet_type == Packet.ANNOUNCE:
+    print(f"  pubkey: {bytes(packet.raw[b:b+32]).hex()}")
+    b += 32
+    print(f"  verifykey: {bytes(packet.raw[b:b+32]).hex()}")
+    b += 32
+    print(f"  name hash: {bytes(packet.raw[b:b+10]).hex()}")
+    b += 10
+    print(f"  random hash: {bytes(packet.raw[b:b+10]).hex()}")
+    b += 10
+    print(f"  signature: {bytes(packet.raw[b:b+64]).hex()}")
