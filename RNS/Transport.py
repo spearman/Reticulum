@@ -1453,6 +1453,16 @@ class Transport:
         packet = RNS.Packet(None, raw)
         if not packet.unpack(): return
             
+        if os.getenv("RNS_DEBUG_PACKET_TRACE"):
+            from RNS import debug
+            with debug.debug_lock:
+                from RNS import debug
+                from datetime import datetime, timezone
+                timestamp = (datetime.now(timezone.utc).isoformat(timespec="microseconds")
+                  .replace("+00:00", "Z"))
+                print(f"{timestamp} <<< IN  ", end="", flush=True)
+                debug.show_packet(packet)
+
         packet.receiving_interface = interface
         packet.hops += 1
 

@@ -292,6 +292,17 @@ class Packet:
 
             if not self.packed: self.pack()
 
+            import os
+            if os.getenv("RNS_DEBUG_PACKET_TRACE"):
+                from RNS import debug
+                from datetime import datetime, timezone
+                timestamp = (datetime.now(timezone.utc).isoformat(timespec="microseconds")
+                  .replace("+00:00", "Z"))
+                with debug.debug_lock:
+                    print(f"{timestamp} >>> OUT ", end="", flush=True)
+                    debug.show_packet(self)
+
+
             if RNS.Transport.outbound(self): return self.receipt
             else:
                 RNS.log("No interfaces could process the outbound packet", RNS.LOG_DEBUG) if RNS.sl(RNS.LOG_DEBUG) else None
@@ -326,8 +337,14 @@ class Packet:
     def prove(self, destination=None):
         if self.fromPacked and hasattr(self, "destination") and self.destination:
             if self.destination.identity and self.destination.identity.prv:
+                # FIXME
+                print("IDENTITY PROVE PACKET")
                 self.destination.identity.prove(self, destination)
         elif self.fromPacked and hasattr(self, "link") and self.link:
+            # FIXME
+            print("LINK PROVE PACKET")
+            import traceback
+            print(f"{traceback.print_stack()}")
             self.link.prove_packet(self)
         else:
             RNS.log("Could not prove packet associated with neither a destination nor a link", RNS.LOG_ERROR)
