@@ -343,8 +343,8 @@ class Packet:
         elif self.fromPacked and hasattr(self, "link") and self.link:
             # FIXME
             print("LINK PROVE PACKET")
-            import traceback
-            print(f"{traceback.print_stack()}")
+            #import traceback
+            #print(f"{traceback.print_stack()}")
             self.link.prove_packet(self)
         else:
             RNS.log("Could not prove packet associated with neither a destination nor a link", RNS.LOG_ERROR)
