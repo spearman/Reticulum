@@ -213,7 +213,7 @@ class Identity:
                 except Exception as e:
                     RNS.log("Skipped recombining known destinations from disk, since an error occurred: "+str(e), RNS.LOG_WARNING)
 
-            RNS.log("Saving "+str(len(Identity.known_destinations))+" known destinations to storage...", RNS.LOG_VERBOSE)
+            RNS.log("Saving "+str(len(Identity.known_destinations))+" known destinations to storage...", RNS.LOG_DEBUG) if RNS.sl(RNS.LOG_DEBUG) else None
             temp_file = RNS.Reticulum.storagepath+f"/known_destinations.tmp.{time.time()}"
 
             try:
@@ -230,7 +230,7 @@ class Identity:
             if save_time < 1: time_str = str(round(save_time*1000,2))+"ms"
             else:             time_str = str(round(save_time,2))+"s"
 
-            RNS.log("Saved known destinations to storage in "+time_str, RNS.LOG_VERBOSE)
+            RNS.log("Saved known destinations to storage in "+time_str, RNS.LOG_DEBUG) if RNS.sl(RNS.LOG_DEBUG) else None
 
         except Exception as e:
             RNS.log("Error while saving known destinations to disk, the contained exception was: "+str(e), RNS.LOG_ERROR)
@@ -602,21 +602,18 @@ class Identity:
                             signal_str = " ["
                             if packet.rssi != None:
                                 signal_str += "RSSI "+str(packet.rssi)+"dBm"
-                                if packet.snr != None:
-                                    signal_str += ", "
-                            if packet.snr != None:
-                                signal_str += "SNR "+str(packet.snr)+"dB"
+                                if packet.snr != None: signal_str += ", "
+                            if packet.snr != None: signal_str += "SNR "+str(packet.snr)+"dB"
                             signal_str += "]"
-                        else:
-                            signal_str = ""
+
+                        else: signal_str = ""
 
                         if hasattr(packet, "transport_id") and packet.transport_id != None:
                             RNS.log("Valid announce for "+RNS.prettyhexrep(destination_hash)+" "+str(packet.hops)+" hops away, received via "+RNS.prettyhexrep(packet.transport_id)+" on "+str(packet.receiving_interface)+signal_str, RNS.LOG_EXTREME) if RNS.sl(RNS.LOG_EXTREME) else None
                         else:
                             RNS.log("Valid announce for "+RNS.prettyhexrep(destination_hash)+" "+str(packet.hops)+" hops away, received on "+str(packet.receiving_interface)+signal_str, RNS.LOG_EXTREME) if RNS.sl(RNS.LOG_EXTREME) else None
 
-                        if ratchet:
-                            Identity._remember_ratchet(destination_hash, ratchet)
+                        if ratchet: Identity._remember_ratchet(destination_hash, ratchet)
 
                         return True
 

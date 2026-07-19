@@ -423,6 +423,7 @@ def program_setup(configdir, dispall=False, verbosity=0, name_filter=None, json=
                         elif ifstat["mode"] == RNS.Interfaces.Interface.Interface.MODE_ROAMING: modestr = "Roaming"
                         elif ifstat["mode"] == RNS.Interfaces.Interface.Interface.MODE_BOUNDARY: modestr = "Boundary"
                         elif ifstat["mode"] == RNS.Interfaces.Interface.Interface.MODE_GATEWAY: modestr = "Gateway"
+                        elif ifstat["mode"] == RNS.Interfaces.Interface.Interface.MODE_INTERNAL: modestr = "Internal"
                         else: modestr = "Full"
 
 
@@ -449,6 +450,9 @@ def program_setup(configdir, dispall=False, verbosity=0, name_filter=None, json=
                                     clients_string = ""
                             else:
                                 clients_string = "Clients   : "+str(clients)
+                                if "blocked_ips" in ifstat:
+                                    p = ifstat["blocked_ips"] > 0
+                                    if p: clients_string += "\n    Blocked   : "+str(ifstat["blocked_ips"])+" IP"+"s" if p else ""
 
                         else:
                             clients = None

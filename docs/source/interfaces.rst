@@ -230,6 +230,51 @@ specify the target Yggdrasil IPv6 address and port, like so:
       target_host = 201:5d78:af73:5caf:a4de:a79f:3278:71e5
       target_port = 4343
 
+Automated Blocking
+------------------
+Listener instances of ``BackboneInterface`` will automatically block fast-flapping clients,
+that repeatedly connect for a short amount of time, and then disconnect. Such behavior usually
+occurs from clients trying to spam the network with announces or path requests, by connecting, dumping
+a massive amount of requests, and then disconnecting in an attempt to bypass rate limits.
+
+While such bypass attempts only have very limited effect on the amount of spam actually dumped (ingress limits
+trigger immediately once a client exceeds rate limits), the behavior is often seen anyways, and
+causes log noise and needless interface rotation. The fast-flapping block ensures such clients
+are never allocated an interface on the transport instance.
+
+Another common cause can simply be clients using implementations that are broken, or automated
+scanning tools attempting to connect to the instance.
+
+.. code:: ini
+
+  [[Backbone Listener]]
+    type = BackboneInterface
+    enabled = yes    
+    listen_on = 0.0.0.0
+    port = 4242
+
+    # Whether to enable blocking
+    block_fast_flapping = yes
+
+    # How long an IP address stays
+    # blocked, in minutes. Set to
+    # 12 hours by default.
+    fast_flapping_block_time = 720
+
+    # The minimum time, in seconds,
+    # an interface must stay connected
+    # to be considered not fast-flapping.
+    fast_flapping_threshold = 20
+
+    # Amount of fast flaps a remote
+    # IP can perform before having
+    # blocking triggered.
+    fast_flapping_grace = 5
+
+The configuration options listed in the example above are the *default values*, and you do
+not need to add them for automated blocking to work, but you can use them to change the
+behavior from the defaults, if necessary.
+
 .. _interfaces-tcps:
 
 TCP Server Interface
@@ -998,7 +1043,13 @@ On a real system, you should make the script robust enough to deal with intermit
 **Physical Location**
 
 ``latitude``, ``longitude``, ``height``
-  Optional physical coordinates for the interface. These are useful for mapping discovered interfaces geographically or for clients to automatically select the nearest access point. Coordinates should be in decimal degrees, height in meters.
+  Optional physical coordinates for the interface. These are useful for mapping discovered interfaces geographically or for clients to automatically select the nearest access point. Coordinates should be in decimal degrees, height in meters above mean sea level.
+
+``location_cmd``
+  Optional path to executable or script that returns the physical coordinates for the interface. This can be used instead of manually setting ``latitude``, ``longitude`` and ``height``. Reticulum expects the script to output the location data to ``stdout`` on a single line, separated by commas, with values as floating point numbers in the format ``LAT, LON, HEIGHT``. Coordinates should be in decimal degrees, height in meters above mean sea level.
+
+.. note::
+   The height value for interface discovery is specified in *height above mean sea level*! This is the geoid-corrected height value, and is distinct from GPS altitude. If you manually specify height, it will typically be set to what you find on a topographical map. If you are using a script to output the location data, make sure that you are using the geoid-corrected altitude, not height above the GPS ellipsoid. Most GPS systems will make both figures available.
 
 **Radio Parameters**
 
@@ -1207,6 +1258,22 @@ These can be used to control various aspects of interface behaviour.
      link or a remote TCP tunnel) solely to discover better local
      infrastructure, which then supersedes the bootstrap interface.
 
+
+ * | The ``recursive_prs`` option allows you to enable recursive path
+     discovery on an interface regardless of its configured interface
+     mode. When this option is enabled, Reticulum will attempt to
+     recursively discover paths for path requests received on this
+     interface.
+
+
+ * | The ``announces_from_internal`` option controls whether any
+     announces *received on* an ``internal`` mode interface will
+     propagate *out* on the interface this option is set on. Note
+     that this controls *announce propagation*; even if announces
+     do not propagate out when received, paths to destinations on
+     ``internal`` mode interfaces may still be resolvable by means
+     of path requests.
+
 .. _interfaces-modes:
 
 Interface Modes
@@ -1283,6 +1350,15 @@ the default mode.
      network, but also has a high-speed connection to a
      public Transport Node available on the Internet, the interface
      connecting over the Internet should be set to ``boundary`` mode.
+
+ * | The ``internal`` mode designates interfaces that belong to a
+     network different from any marked as ``boundary``. Announces from
+     a ``boundary`` interface will not propagate to interfaces set as
+     ``internal``, but announces *will* propagate from ``internal`` *to*
+     ``boundary``. Devices on the ``internal`` side of the network will
+     still be able to resolve paths to destinations across the boundary
+     when needed, since recursive path requests are enabled for ``internal``
+     mode interfaces by default.
 
 For a table describing the impact of all modes on announce propagation,
 please see the :ref:`Announce Propagation Rules<understanding-announcepropagation>` section.
