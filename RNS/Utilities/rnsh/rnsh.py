@@ -37,7 +37,6 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 
 import re
 import os
@@ -155,7 +154,7 @@ async def _rnsh_cli_main():
         return_code = await initiator.initiate(configdir=configdir,
                                                rnsconfigdir=args.rnsconfig,
                                                identitypath=args.identity,
-                                               logfile=logfile,
+                                               logfile=f"{logfile}.initiator",
                                                verbosity=args.verbose,
                                                quietness=args.quiet,
                                                noid=args.no_id,
@@ -163,6 +162,7 @@ async def _rnsh_cli_main():
                                                timeout=args.timeout,
                                                command=args.command
         )
+        RNS.log(f"Sesssion with <{args.destination}> ended", RNS.LOG_INFO)
         return return_code if args.mirror else 0
     else:
         print("")

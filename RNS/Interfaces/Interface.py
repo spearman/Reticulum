@@ -1,6 +1,6 @@
 # Reticulum License
 #
-# Copyright (c) 2016-2025 Mark Qvist
+# Copyright (c) 2016-2026 Mark Qvist
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -52,7 +52,8 @@ class Interface:
 
     # Which interface modes a Transport Node should
     # actively discover paths for.
-    DISCOVER_PATHS_FOR  = [MODE_ACCESS_POINT, MODE_GATEWAY, MODE_ROAMING, MODE_INTERNAL]
+    DISCOVER_PATHS_FOR    = [MODE_ACCESS_POINT, MODE_GATEWAY, MODE_ROAMING, MODE_INTERNAL]
+    BOUNDARY_SEARCH_MODES = [MODE_BOUNDARY, MODE_GATEWAY]
 
     # How many samples to use for announce
     # frequency calculations
@@ -70,9 +71,8 @@ class Interface:
     # to hold at any given time.
     MAX_HELD_ANNOUNCES  = 256
 
-    # How long a spawned interface will be
-    # considered to be newly created. Two
-    # hours by default.
+    # Control parameters
+    DEFAULT_GRAVITY          = 0
     IC_NEW_TIME              = 2*60*60
     IC_BURST_FREQ_NEW        = 3
     IC_BURST_FREQ            = 10
@@ -82,7 +82,7 @@ class Interface:
     IC_BURST_PENALTY         = 15
     IC_HELD_RELEASE_INTERVAL = 5
     IC_DEQUE_MIN_SAMPLE      = 2
-    IC_BURST_MIN_SAMPLES     = 6
+    EC_BURST_MIN_SAMPLES     = 2
     EC_PR_FREQ               = 5
     EGRESS_CONTROL           = False
 
@@ -93,32 +93,49 @@ class Interface:
 
     AUTOCONFIGURE_MTU = False
     FIXED_MTU         = False
+    DEFAULT_IFAC_SIZE = 16
 
     def __init__(self):
         self.rxb      = 0
         self.txb      = 0
+        self.arxb     = 0
+        self.atxb     = 0
+        self.arxc     = 0
+        self.atxc     = 0
+        self.prxb     = 0
+        self.ptxb     = 0
+        self.prxc     = 0
+        self.ptxc     = 0
+        self.gravity  = 0
         self.created  = time.time()
         self.detached = False
         self.online   = False
         self.bitrate  = 62500
         self.HW_MTU   = None
+        self.__hash   = None
 
+        self.announce_cap             = RNS.Reticulum.ANNOUNCE_CAP/100.0
         self.supports_discovery       = False
         self.discoverable             = False
         self.last_discovery_announce  = 0
         self.bootstrap_only           = False
         self.recursive_prs            = False
         self.announces_from_internal  = True
+        self.announces_to_internal    = None
         self.parent_interface         = None
         self.spawned_interfaces       = None
         self.tunnel_id                = None
         self.ingress_control          = True
         self.phy_keepalive            = False
+        self.shared_medium            = False
         
         self.ic_burst_active          = False
         self.ic_burst_activated       = 0
+        self.ic_burst_sustained       = 0
         self.ic_pr_burst_active       = False
         self.ic_pr_burst_activated    = 0
+        self.ic_pr_burst_sustained    = 0
+        self.ic_pr_burst_cooldown     = 0
         self.ic_held_release          = 0
         self.ic_max_held_announces    = RNS.Reticulum.get_instance()._default_ic_max_held_announces()
         self.ic_burst_hold            = RNS.Reticulum.get_instance()._default_ic_burst_hold()
@@ -132,14 +149,38 @@ class Interface:
         self.ec_pr_freq               = RNS.Reticulum.get_instance()._default_ec_pr_freq()
         self.egress_control           = RNS.Reticulum.get_instance()._default_egress_control()
         self.held_announces           = {}
+        self.transmit_buffer          = None
 
         self.ia_freq_deque = deque(maxlen=Interface.IA_FREQ_SAMPLES)
         self.oa_freq_deque = deque(maxlen=Interface.OA_FREQ_SAMPLES)
         self.ip_freq_deque = deque(maxlen=Interface.IA_FREQ_SAMPLES)
         self.op_freq_deque = deque(maxlen=Interface.OA_FREQ_SAMPLES)
 
+        self.protocol_violations = 0
+        self.ifac_violations     = 0
+        self.packet_filter_hits  = 0
+        self.dp_ingress_tcount   = 0
+        self.dp_ingress_bytes    = 0
+        self.dp_ingress_packets  = 0
+        self.dp_ingress_hold     = None
+        self.dp_ingress_gated    = False
+
+        self.tx_hwm              = 4*1024*1024
+        self.tx_stalled          = False
+        self.tx_drops            = 0
+        self.tx_dropped_bytes    = 0
+        self._dp_ec_prev_sent    = 0
+        self._dp_ec_zero_ticks   = 0
+        self._dp_ec_last_drain   = time.time()
+
+        self.reports_phy_stats = False
+        self.r_stat_rssi       = None
+        self.r_stat_snr        = None
+        self.r_stat_q          = None
+
     def get_hash(self):
-        return RNS.Identity.full_hash(str(self).encode("utf-8"))
+        if not self.__hash: self.__hash = RNS.Identity.full_hash(str(self).encode("utf-8"))
+        return self.__hash
 
     # This is a generic function for determining when an interface
     # should activate ingress limiting. Since this can vary for
@@ -151,8 +192,10 @@ class Interface:
             ia_freq = self.incoming_announce_frequency()
 
             if self.ic_burst_active:
-                if ia_freq < freq_threshold and time.time() > self.ic_burst_activated+self.ic_burst_hold:
-                    if len(self.ia_freq_deque) >= self.IC_BURST_MIN_SAMPLES: self.ic_burst_active = False
+                if ia_freq < freq_threshold and time.time() > self.ic_burst_activated+self.ic_burst_hold and time.time() > self.ic_burst_sustained+self.ic_burst_hold:
+                    if len(self.ia_freq_deque) >= self.IC_DEQUE_MIN_SAMPLE: self.ic_burst_active = False
+                else:
+                    if ia_freq >= freq_threshold: self.ic_burst_sustained = time.time()
 
                 return True
 
@@ -160,6 +203,7 @@ class Interface:
                 if ia_freq > freq_threshold:
                     self.ic_burst_active = True
                     self.ic_burst_activated = time.time()
+                    self.ic_burst_sustained = time.time()
                     self.ic_held_release = time.time() + self.ic_burst_penalty
                     return True
 
@@ -173,8 +217,12 @@ class Interface:
             ip_freq = self.incoming_pr_frequency()
 
             if self.ic_pr_burst_active:
-                if ip_freq < freq_threshold and time.time() > self.ic_pr_burst_activated+self.ic_burst_hold:
-                    self.ic_pr_burst_active = False
+                if ip_freq < freq_threshold and time.time() > self.ic_pr_burst_activated+self.ic_burst_hold and time.time() > self.ic_pr_burst_sustained+self.ic_burst_hold:
+                    if self.ic_pr_burst_cooldown <= 0: self.ic_pr_burst_active = False
+                    else: self.ic_pr_burst_cooldown -= 1
+                else:
+                    self.ic_pr_burst_cooldown = 3
+                    if ip_freq >= freq_threshold: self.ic_pr_burst_sustained = time.time()
 
                 return True
 
@@ -182,6 +230,8 @@ class Interface:
                 if ip_freq > freq_threshold:
                     self.ic_pr_burst_active = True
                     self.ic_pr_burst_activated = time.time()
+                    self.ic_pr_burst_sustained = time.time()
+                    self.ic_pr_burst_cooldown = 3
                     return True
 
                 else: return False
@@ -191,28 +241,28 @@ class Interface:
     def should_egress_limit_pr(self):
         if self.egress_control:
             freq_threshold = self.ec_pr_freq
-            op_freq = self.outgoing_pr_frequency()
+            op_freq = self.outgoing_pr_frequency(preemptive=True)
 
             if op_freq > freq_threshold:
-                if len(self.op_freq_deque) >= self.IC_BURST_MIN_SAMPLES: return True
+                if len(self.op_freq_deque) >= self.EC_BURST_MIN_SAMPLES: return True
             
         return False
 
     def optimise_mtu(self):
         if self.AUTOCONFIGURE_MTU:
             if self.bitrate   >= 1_000_000_000:  self.HW_MTU = 524288
-            elif self.bitrate > 750_000_000:     self.HW_MTU = 262144
-            elif self.bitrate > 400_000_000:     self.HW_MTU = 131072
-            elif self.bitrate > 200_000_000:     self.HW_MTU = 65536
-            elif self.bitrate > 100_000_000:     self.HW_MTU = 32768
-            elif self.bitrate > 10_000_000:      self.HW_MTU = 16384
-            elif self.bitrate > 5_000_000:       self.HW_MTU = 8192
-            elif self.bitrate > 2_000_000:       self.HW_MTU = 4096
-            elif self.bitrate > 1_000_000:       self.HW_MTU = 2048
-            elif self.bitrate > 62_500:          self.HW_MTU = 1024
+            elif self.bitrate >= 750_000_000:    self.HW_MTU = 262144
+            elif self.bitrate >= 400_000_000:    self.HW_MTU = 131072
+            elif self.bitrate >= 200_000_000:    self.HW_MTU = 65536
+            elif self.bitrate >= 100_000_000:    self.HW_MTU = 32768
+            elif self.bitrate >= 10_000_000:     self.HW_MTU = 16384
+            elif self.bitrate >= 5_000_000:      self.HW_MTU = 8192
+            elif self.bitrate >= 2_000_000:      self.HW_MTU = 4096
+            elif self.bitrate >= 1_000_000:      self.HW_MTU = 2048
+            elif self.bitrate >= 62_500:         self.HW_MTU = 1024
             else:                                self.HW_MTU = None
 
-        RNS.log(f"{self} hardware MTU set to {self.HW_MTU}", RNS.LOG_PATHING)
+        RNS.log(f"{self} hardware MTU set to {self.HW_MTU}", RNS.LOG_EXTREME)
 
     def age(self):
         return time.time()-self.created
@@ -243,32 +293,56 @@ class Interface:
                         RNS.log("Releasing held announce packet "+str(selected_announce_packet)+" from "+str(self), RNS.LOG_EXTREME)
                         self.ic_held_release = time.time() + self.ic_held_release_interval
                         self.held_announces.pop(selected_announce_packet.destination_hash)
-                        def release(): RNS.Transport.inbound(selected_announce_packet.raw, selected_announce_packet.receiving_interface)
+                        def release(): RNS.Transport.inbound(selected_announce_packet.raw, selected_announce_packet.receiving_interface, tc=RNS.Transport.TC_INGRESS_LIMITED, ifac_handled=True)
                         threading.Thread(target=release, daemon=True).start()
         
         except Exception as e:
             RNS.log("An error occurred while processing held announces for "+str(self), RNS.LOG_ERROR)
             RNS.log("The contained exception was: "+str(e), RNS.LOG_ERROR)
 
-    def received_announce(self, from_spawned=False):
+    def received_announce(self, size=0, from_spawned=False):
+        self.arxc += 1; self.arxb += size
         self.ia_freq_deque.append(time.time())
         if hasattr(self, "parent_interface") and self.parent_interface != None:
-            self.parent_interface.received_announce(from_spawned=True)
+            self.parent_interface.received_announce(size=size, from_spawned=True)
 
-    def sent_announce(self, from_spawned=False):
+    def sent_announce(self, size=0, from_spawned=False):
+        self.atxc += 1; self.atxb += size
         self.oa_freq_deque.append(time.time())
         if hasattr(self, "parent_interface") and self.parent_interface != None:
-            self.parent_interface.sent_announce(from_spawned=True)
+            self.parent_interface.sent_announce(size=size, from_spawned=True)
 
-    def received_path_request(self, from_spawned=False):
+    def received_path_request(self, size=0, from_spawned=False):
+        self.prxc += 1; self.prxb += size
         self.ip_freq_deque.append(time.time())
         if hasattr(self, "parent_interface") and self.parent_interface != None:
-            self.parent_interface.received_path_request(from_spawned=True)
+            self.parent_interface.received_path_request(size=size, from_spawned=True)
 
-    def sent_path_request(self, from_spawned=False):
+    def sent_path_request(self, size=0, from_spawned=False):
+        self.ptxc += 1; self.ptxb += size
         self.op_freq_deque.append(time.time())
         if hasattr(self, "parent_interface") and self.parent_interface != None:
-            self.parent_interface.sent_path_request(from_spawned=True)
+            self.parent_interface.sent_path_request(size=size, from_spawned=True)
+
+    def protocol_violation(self, description=None):
+        self.protocol_violations += 1
+        RNS.log(f"Protocol violation on {self}: {description}", RNS.LOG_DEBUG) if RNS.sl(RNS.LOG_DEBUG) else None
+        return None
+
+    def ifac_violation(self, description=None):
+        self.ifac_violations += 1
+        RNS.log(f"IFAC violation on {self}: {description}", RNS.LOG_DEBUG) if RNS.sl(RNS.LOG_DEBUG) else None
+        return None
+
+    def packet_filter_hit(self):
+        self.packet_filter_hits += 1
+        return None
+
+    @property
+    def ic_burst_count(self): return None
+
+    @property
+    def ic_pr_burst_count(self): return None
 
     def incoming_announce_frequency(self):
         n = len(self.ia_freq_deque)
@@ -303,8 +377,8 @@ class Interface:
             hz = n / span
             return hz
 
-    def outgoing_pr_frequency(self):
-        n = len(self.op_freq_deque)
+    def outgoing_pr_frequency(self, preemptive=False):
+        n = len(self.op_freq_deque)+(1 if preemptive else 0)
         if not len(self.op_freq_deque) > 1: return 0
         else:
             oldest = self.op_freq_deque[0]
@@ -316,7 +390,7 @@ class Interface:
 
     def process_announce_queue(self):
         if not hasattr(self, "announce_cap"):
-            self.announce_cap = RNS.Reticulum.ANNOUNCE_CAP
+            self.announce_cap = RNS.Reticulum.ANNOUNCE_CAP/100.0
 
         if hasattr(self, "announce_queue"):
             try:
@@ -337,12 +411,13 @@ class Interface:
                     selected = entries[0]
 
                     now       = time.time()
-                    tx_time   = (len(selected["raw"])*8) / self.bitrate
+                    tx_size   = len(selected["raw"])
+                    tx_time   = (tx_size*8) / self.bitrate
                     wait_time = (tx_time / self.announce_cap)
                     self.announce_allowed_at = now + wait_time
 
-                    self.process_outgoing(selected["raw"])
-                    self.sent_announce()
+                    RNS.Transport.transmit(self, selected["raw"])
+                    self.sent_announce(tx_size)
 
                     if selected in self.announce_queue:
                         self.announce_queue.remove(selected)
@@ -362,13 +437,14 @@ class Interface:
     def detach(self):
         pass
 
+    def teardown(self):
+        pass
+
     @staticmethod
     def get_config_obj(config_in):
-        if type(config_in) == ConfigObj:
-            return config_in
+        if type(config_in) == ConfigObj: return config_in
         else:
-            try:
-                return ConfigObj(config_in)
+            try: return ConfigObj(config_in)
             except Exception as e:
                 RNS.log(f"Could not parse supplied configuration data. The contained exception was: {e}", RNS.LOG_ERROR)
                 raise SystemError("Invalid configuration data supplied")

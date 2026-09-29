@@ -1,20 +1,27 @@
-### 2026-07-19: RNS 1.3.9
+### 2026-09-29: RNS 1.5.5
 
-**Critical Security Update**: This release fixes a severe security flaw in `rnsh`. Due to the nature of the issue, I will not disclose any further details for the time being. Once operators have had time to update, I will provide a full report for transparency. If you use `rnsh`, update **right now**.
+This release adds live interface attach, detach and reload, as well as significant improvements to interface discovery. Auto-connecting interfaces is now also supported on Windows and macOS.
 
-**Important**: The new version of `rnsh` changes default identity file locations, and these will now be sourced from `~/.rnsh/identity` (initiator) and `~/.rnsh/identity.default` (listener). Make sure you copy your old files to this directory, or specify a custom identity path using the command line arguments. The `--config` argument has also been renamed to `--rnsconfig`, and the `--config` argument will now specify the `rnsh` configuration directory instead of the RNS configuration directory, bringing the behavior into alignment with other RNS utilities. 
-
-Additionally, this release includes automated blocking of fast-flapping clients on `BackboneInterface` listeners (see the Interfaces chapter of the manual for details), and a number of improvements to resource handling. The logging system has also been improved, and path and destination information moved to a new `LOG_PATHING` loglevel, to decrease log noise.
+It also brings improvements to `rngit` and fixes discovered `I2PInterface` configuration snippets, along with a number of other bugs.
 
 **Changes**
-- Fixed a critical security issue in `rnsh`
-- Added automated blocking of fast-flapping clients to `BackboneInterface`
-- Added new `LOG_PATHING` loglevel, improved logging
-- Added ability to make internal-mode interfaces discoverable
-- Added ability to get discoverable interface location from external script
-- Added `RESOURCE_RCL` signal on resource receiver cancel
-- Improved resource handling and reliability
-- Updated `rnsh` config args to work similarly to other RNS utilities
+- Added ability to `--attach`, `--detach` and `--reload` interfaces to the `rnstatus` utility
+- Added interface discovery auto-connect support on Windows and macOS
+- Added ability to download micron-converted versions of markdown files to the `rngit` page node
+- Added workdoc counts to filter scope links to the `rngit` page node
+- Added version info to `rnstatus` discovered interfaces output
+- Added `--show-stale` and `--show-unknown` options to `rnstatus`
+- Added sequential naming of auto-connected interfaces on announced name collisions
+- Added auto-connect implementation and version criteria filtering
+- Added configuration option for allowing auto-connects to discovered interfaces with missing version info
+- Improved sanitization of nonsensical interface discovery IFAC announce data
+- Fixed `I2PInterface` discovery config snippets not including `.b32.i2p`
+- Fixed timeout and response rejects not being processed for single-packet requests, by **JRG**
+- Fixed missing configurable property propagations on spawned interfaces, by **JRG**
+- Fixed ingress control producer comprehension at mid-watermark using incorrect variable name for interface type check, by **JRG**
+- Fixed instances of `announce_cap` property ensurance logic not storing announce cap value as a fraction, by **JRG**
+- Fixed a potential race condition in `LocalInterface` initialization.
+- Updated documentation and manual
 
 **Verified Retrieval**
 You can retrieve and verify this release over Reticulum using the built-in `rngit release` utility. To retrieve only the installation `.whl` package, and the release manifest for future updates, you can use:
@@ -43,6 +50,202 @@ rnid -i bc7291552be7a58f361522990465165c -V rns_*.rsm *.rsg
 ```
 
 The `rnid` utility will then verify the signatures, and display whether they are valid. If the signature cannot be verified, the release has been tampered with and should be discarded.
+
+### 2026-09-11: RNS 1.5.4
+
+This release improves RNode BLE connectivity reliability on desktop operating systems.
+
+**Changes**
+- Fixed RNode BLE device address acquisition on windows, by **Nickie Deuxyeux**
+- Fixed RNode BLE re-connection deadlock on desktop
+- Improved RNode BLE reconnect reliability
+
+### 2026-09-10: RNS 1.5.3
+
+This maintenance release adds functionality to, and fixes bugs in `rngit`, and includes a few other optimizations and improvements.
+
+**Changes**
+- Added media request handler to `rngit`, for serving images to `nomadnet` clients
+- Added media conversion handler to `rngit`, auto-converting images to webp
+- Added importable helper method for using the `rngit` media converter in other programs
+- Added a `no_ident` template to the `rngit` page node
+- Added immediate activation of changed permissions with `rngit perms`
+- Added optimized HDLC framer
+- Fixed `rngit` repo admins not being able activate/complete workdocs from other users, by **Bergie**
+- Fixed a typo, I'm positively certain this is the last one
+
+### 2026-08-28: RNS 1.5.2
+
+This maintenance release fixes a regression in resource transfers that was introduced in 1.5.1, an `I2PInterface` bug, and sets dataplane control parameters to default values that are actually sensible. If you installed `1.5.1`, it's update time again, baby.
+
+**Changes**
+- Tuned dataplane control parameters
+- Added example for blocking unidentified page node peers to `rngit` default config
+- Fixed regression in resource transfers causing some `rngit` file downloads to fail
+- Fixed keepalive frames being passed to transport core on `I2PInterface`
+
+### 2026-08-28: RNS 1.5.1
+
+This release focuses on dataplane control, memory bounding and transport throughput, with adaptive ingress and egress control for interfaces, a new (and very efficient) zero-copy coalescing transmit buffer, an optimized HDLC deframer, and a range of other improvements to the inbound packet processing paths. It also introduces support for live profiling, and various new diagnostics output in `rnstatus`, along with a number of bug fixes and general improvements.
+
+**Changes**
+- Added adaptive dataplane egress control
+- Added adaptive dataplane ingress control
+- Added zero-copy coalescing transmit buffers to interfaces using the `BackboneInterface` backend
+- Added early protocol violation checks for invalid frames
+- Added transport implementation name and version to discovery information requirements
+- Added full live profiling to the built-in `Profiler` primitive, by **K8**
+- Added the `@RNS.Profiler.profile` decorator, by **K8**
+- Added support for indefinitely running, reentrant profilers with bounded capture, by **K8**
+- Added live profiling results output to `rnstatus`, by **K8**
+- Added PPS statistics to `rnstatus`
+- Added interface MTU display to `rnstatus`
+- Added interface TX drop statistics to `rnstatus`
+- Added interface TX buffer size output to `rnstatus`
+- Added throughput benchmarker to the test suite
+- Added support for natively compiled module builds, and the ability to load compiled modules when available
+- Added module compilation status reporting from in-wheel build information
+- Added parity tests for HDLC, IFAC and HKDF against the legacy implementations
+- Added shared medium hints to interfaces
+- Improved memory and CPU consumption under high traffic loads
+- Improved traffic class handling
+- Optimized HKDF to ~5.7x performance, if this worries you, **good**; then see the full parity and standard vector test suite and read the code
+- Optimized inbound and outbound IFAC handling to ~90x performance on large frames
+- Optimized inbound packet processing by reducing lock acquisitions and path table contention
+- Optimized lookups for pending and active links using hash maps for lookup operations
+- Optimized announce validation by caching signature validation results, significantly lowering announce storm CPU load
+- Optimized the HDLC deframer
+- Reduced redundant packet hashing in inbound processing
+- Tuned default inbound queue lengths and announce queuing
+- Tuned automatic interface MTU configuration
+- Fixed `Resource` transfers failing when initialized from stream-based data sources that fell outside `MAX_EFFICIENT_SIZE`
+- Fixed an invalid prefix stripping bug in the `rngit` page server (`.something` files not viewable)
+- Fixed RSSI/SNR reporting regression
+- Fixed keepalive handling on non-epoll backends
+- Fixed a bug in `rngit` page navigation content initialization order
+- Fixed the `rngit` page node not being able to serve in-tree downloads for large files
+- Fixed `rnstatus` blocked IP listing including IPs that were actually not yet blocked
+- Fixed `rnstatus` traffic totals counting the local shared instance inter-app transit in totals
+- Fixed various minor bugs in `rnsh`, `rnir`, identity handling
+- Fixed a latent bug in the AES module, where an exception would not resolve it's exception description correctly, and instead raise another exception.
+- Removed dead Python 2 code from `umsgpack`
+
+### 2026-08-22: RNS 1.5.0
+
+This release significantly improves the core Transport handling of RNS, with a priority-based ingress queue backend, substantially improved efficiency of both data and management traffic handling, more efficient ingress/egress limiting, and a long list of other improvements and bugfixes.
+
+**Changes**
+- Added ability to include operator LXMF address in interface discovery information
+- Added prioritized inbound traffic processing to the transport core
+- Added configurable inbound queue lengths for data, announce, path request and ingress limited traffic
+- Added early filtering for inbound traffic and improved filtering performance
+- Added per-interface protocol violation tracking
+- Added in-flight path requests tracking
+- Added request and response batching for in-flight path requests
+- Added ability to signal blackholed status in announce validation return to the API
+- Added full link MDU utilization for `Channel` and `Buffer`
+- Added inbound queue pressure and queue drop statistics to `rnstatus`
+- Added detailed announce and path request traffic flow statistics per interface to `rnstatus`
+- Added total announce and PR count/frequency stats per interface to `rnstatus`
+- Added data flow speed and composition stats to `rnstatus`
+- Added protocol violation stats to `rnstatus`
+- Added active link statistics to `rnstatus`
+- Added blocked IP listings to `rnstatus`
+- Added medium bitrate based timeout calculation helpers and RPC functions, by **Zenith**
+- Added extra timeout for discovery path requests when slow interfaces are online, by **Zenith**
+- Added adaptive timeouts to `rncp`, `rnpath`, `rnprobe` and `rnx`, by **Zenith**
+- Added adaptive timeout calculation to `rngit`, by **Zenith**
+- Improved overall Transport inbound processing speed
+- Improved path request handling significantly
+- Improved path request ingress limiting and accounting
+- Improved egress limiting responsiveness under high incoming path request load
+- Improved transport background job processing
+- Improved early rejection of packets with excessive hop counts
+- Fixed `BackboneInterface` EPOLL receive starvation and ingress control timestamp handling, by **JRG**
+- Fixed potential transport deadlock on receipts lock when callbacks sends packets, by **JRG**
+- Fixed transport state handling edge cases in path request, announce queue and pending link processing, by **JRG**
+- Fixed link watchdog not resetting on receive exceptions, by **JRG**
+- Fixed `Resource` cancellation on multi-segment resources, by **JRG**
+- Fixed `Resource` transfer part index alignment and rebinding, by **JRG**
+- Fixed stale BLE device reference in `RNodeInterface`, by **JRG**
+- Fixed ratchet cleaning retained preservation, by **JRG**
+- Fixed invalid `rnstatus` statistics handling, by **JRG**
+- Fixed various bugs in packet, link and interface handling, by **JRG**
+- Fixed per-interface burst count inconsistencies in `rnstatus` output
+- Fixed `rngit` file resource operations failing on Windows
+- Fixed `rnodeconf` config summary incorrectly displaying WiFi mode
+- Fixed speedtest example aborting transfers on stale link status
+- Updated documentation, including manual sections on queue tuning and interface discovery options
+
+### 2026-07-26: RNS 1.4.2
+
+This maintenance release fixes bugs in blackholed identity filtering and recursive path request handling for RNode interfaces.
+
+**Changes**
+- Fixed a bug where recursive path requests would cause a division by zero error on uninitialized RNode interfaces.
+- Fixed slow blackholed filtering for discovered interfaces on Android in some cases.
+
+### 2026-07-24: RNS 1.4.1
+
+This release significantly improves path convergence and stability with the new path re-balancing functionality. It also introduces interface gravity configuration, new API functionality and fixes a range of bugs and inefficiencies.
+
+**Changes**
+- Added dynamic path re-balancing
+- Added `set_max_request_size` to `Destination` API
+- Added `max_response_size` to request API
+- Added interface gravity handling
+- Added `autoconnect_interface_mode` option
+- Added `autoconnect_announces_to_internal` option
+- Added `autoconnect_interface_gravity` option
+- Added `default_gravity` option
+- Added `announces_to_internal` interface option
+- Added `gravity` interface option
+- Added gravity display and sorting option to `rnstatus`
+- Added boundary -> boundary and boundary -> gateway path requests
+- Fixed `I2PInterface` tasks getting garbage-collected prematurely, thanks to **welo**
+- Fixed various minor bugs in `I2PInterface`
+- Fixed ingress control burst active flag deadlocking until new announces arrived under burst timing patterns
+- Fixed various memory inefficiencies
+- Fixed loglevel `LOG_EXTREME` not being usable in some cases
+- Fixed historical interface discoveries not being cleaned according to blackholed identities
+
+### 2026-07-20: RNS 1.4.0
+
+This release focuses on performance, stability and reliability improvements, particularly with resource-constrained systems in mind. It also fixes several bugs, reduces logging noise, and makes information about blocked `BackboneInterface` clients available in `ifstats`.
+
+**Changes**
+- Optimized transport data persistence to avoid CPU spikes on low-powered systems
+- Optimized interface hashes calculation and access to reduce overall processing load
+- Implemented known destinations cleaning as background priority to avoid lock contention and reduce load on CPU-constrained systems
+- Deprecated known destination on-disk recombination on background data persist to alleviate lock contention on CPU-constrained systems
+- Implemented caching of invalid discovery stamps to reduce CPU load on low-powered systems
+- Implemented valid discovery announce caching and sequential validation lock to reduce processing load on CPU-constrained systems
+- Fixed link stale teardown erroneously occurring due to missing keepalive from initiator side when destination continously sends packets but initiator stays silent
+- Fixed race condition in link watchdog timing
+- Fixed missing None-check in `BackboneInterface` fast-flap detection
+- Fixed invalid exception log handler in `BackboneInterface`
+- Increased default discovery stamp value to 16
+- Added blocked IPs list to ifstats
+- Improved backbone interface logging
+- Reduced overall logging noise
+
+### 2026-07-19: RNS 1.3.9
+
+**Critical Security Update**: This release fixes a severe security flaw in `rnsh`. Due to the nature of the issue, I will not disclose any further details for the time being. Once operators have had time to update, I will provide a full report for transparency. If you use `rnsh`, update **right now**.
+
+**Important**: The new version of `rnsh` changes default identity file locations, and these will now be sourced from `~/.rnsh/identity` (initiator) and `~/.rnsh/identity.default` (listener). Make sure you copy your old files to this directory, or specify a custom identity path using the command line arguments. The `--config` argument has also been renamed to `--rnsconfig`, and the `--config` argument will now specify the `rnsh` configuration directory instead of the RNS configuration directory, bringing the behavior into alignment with other RNS utilities. 
+
+Additionally, this release includes automated blocking of fast-flapping clients on `BackboneInterface` listeners (see the Interfaces chapter of the manual for details), and a number of improvements to resource handling. The logging system has also been improved, and path and destination information moved to a new `LOG_PATHING` loglevel, to decrease log noise.
+
+**Changes**
+- Fixed a critical security issue in `rnsh`
+- Added automated blocking of fast-flapping clients to `BackboneInterface`
+- Added new `LOG_PATHING` loglevel, improved logging
+- Added ability to make internal-mode interfaces discoverable
+- Added ability to get discoverable interface location from external script
+- Added `RESOURCE_RCL` signal on resource receiver cancel
+- Improved resource handling and reliability
+- Updated `rnsh` config args to work similarly to other RNS utilities
 
 ### 2026-07-10: RNS 1.3.8
 

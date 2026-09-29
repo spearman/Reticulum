@@ -50,7 +50,6 @@ import RNS.Utilities.rnsh.exception as exception
 import RNS.Utilities.rnsh.process as process
 import RNS.Utilities.rnsh.retry as retry
 import RNS.Utilities.rnsh.session as session
-import re
 import contextlib
 
 import pwd
@@ -112,8 +111,8 @@ def _reload_allowed_file():
 def compute_target_rns_loglevel(verbosity: int, quietness: int, base_level: int = RNS.LOG_INFO) -> int:
     try:
         target = int(base_level) + int(verbosity) - int(quietness)
-        if target < RNS.LOG_CRITICAL: target = RNS.LOG_CRITICAL
-        if target > RNS.LOG_DEBUG:    target = RNS.LOG_DEBUG
+        if target < RNS.LOG_NONE:    target = RNS.LOG_NONE
+        if target > RNS.LOG_EXTREME: target = RNS.LOG_EXTREME
         return target
     
     except Exception: return base_level
@@ -161,9 +160,8 @@ async def listen(configdir, rnsconfigdir, command, identitypath=None, logfile=No
     _no_remote_command = no_remote_command
     session.ListenerSession.allow_remote_command = not no_remote_command
     _remote_cmd_as_args = remote_cmd_as_args
-    if (_cmd is None or len(_cmd) == 0 or _cmd[0] is None or len(_cmd[0]) == 0) \
-            and (_no_remote_command or _remote_cmd_as_args):
-        raise Exception(f"Unable to look up shell for {os.getlogin}, cannot proceed with -A or -C and no <program>.")
+    if (_cmd is None or len(_cmd) == 0 or _cmd[0] is None or len(_cmd[0]) == 0) and (_no_remote_command or _remote_cmd_as_args):
+        raise Exception(f"Unable to look up shell for {os.getlogin()}, cannot proceed with -A or -C and no <program>.")
 
     session.ListenerSession.default_command = _cmd
     session.ListenerSession.remote_cmd_as_args = _remote_cmd_as_args

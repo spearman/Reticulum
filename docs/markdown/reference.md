@@ -69,9 +69,44 @@ alterations should be made on a per-interface basis instead.
 Minimum bitrate required across a medium for Reticulum to be able
 to successfully establish links. Currently 5 bits per second.
 
+#### `DEFAULT_PER_HOP_TIMEOUT = 6`
+
+The default per-hop timeout value used in various timeout calculations.
+
 #### `static get_instance()`
 
-Return the currently running Reticulum instance
+Returns the currently running Reticulum instance.
+
+#### `get_first_hop_timeout(destination)`
+
+Returns a best-effort estimate of a reasonable minimum
+*first-hop* timeout value for a given destination hash.
+If a path is known, this calculation takes the next-hop
+interface’s bitrate into account. If no path is currently
+known, returns `DEFAULT_PER_HOP_TIMEOUT`.
+
+* **Parameters:**
+  **destination** – A destination hash, as *bytes*.
+
+* **Returns:**
+  First-hop timeout, in seconds.
+
+#### `get_lowest_interface_bitrate()`
+
+Returns the bitrate of the slowest currently online
+interface, or None if no online interface bitrate
+
+* **Returns:**
+  Lowest online interface bitrate in bits per second, or `None`.
+
+#### `get_medium_path_timeout()`
+
+Returns an estimate of a reasonable minimum path request timeout covering
+a full round trip for an MTU on the slowest currently online interface
+plus per hop grace
+
+* **Returns:**
+  Timeout in seconds or 0 if it’s unknown.
 
 #### `static should_use_implicit_proof()`
 
@@ -474,6 +509,16 @@ Sets the destinations proof strategy.
 * **Parameters:**
   **proof_strategy** – One of `RNS.Destination.PROVE_NONE`, `RNS.Destination.PROVE_ALL` or `RNS.Destination.PROVE_APP`. If `RNS.Destination.PROVE_APP` is set, the proof_requested_callback will be called to determine whether a proof should be sent or not.
 
+#### `set_max_request_size(max_request_size)`
+
+Sets the maximum accepted request size for registered request handlers.
+
+* **Parameters:**
+  **max_request_size** – The maximum accepted request size in bytes, as an integer.
+
+* **Raises:**
+  `TypeError` or `ValueError` if any of the argument is invalid.
+
 #### `register_request_handler(path, response_generator=None, allow=ALLOW_NONE, allowed_list=None, auto_compress=True)`
 
 Registers a request handler.
@@ -757,7 +802,7 @@ thus preserved. This method can be used for authentication.
 * **Parameters:**
   **identity** – An RNS.Identity instance to identify as.
 
-#### `request(path, data=None, response_callback=None, failed_callback=None, progress_callback=None, timeout=None)`
+#### `request(path, data=None, response_callback=None, failed_callback=None, progress_callback=None, timeout=None, max_response_size=None)`
 
 Sends a request to the remote peer.
 
@@ -766,6 +811,7 @@ Sends a request to the remote peer.
   * **response_callback** – An optional function or method with the signature *response_callback(request_receipt)* to be called when a response is received. See the [Request Example](examples.md#example-request) for more info.
   * **failed_callback** – An optional function or method with the signature *failed_callback(request_receipt)* to be called when a request fails. See the [Request Example](examples.md#example-request) for more info.
   * **progress_callback** – An optional function or method with the signature *progress_callback(request_receipt)* to be called when progress is made receiving the response. Progress can be accessed as a float between 0.0 and 1.0 by the *request_receipt.progress* property.
+  * **max_response_size** – An optional maximum accepted response size, in bytes as an integer.
   * **timeout** – An optional timeout in seconds for the request. If *None* is supplied it will be calculated based on link RTT.
 
 * **Returns:**
@@ -814,7 +860,7 @@ statistics, you will be able to retrieve stats such as *RSSI*, *SNR* and physica
 #### `get_expected_rate()`
 
 * **Returns:**
-  The packet expected in-flight data rate of an established link.
+  The expected in-flight data rate of an established link.
 
 #### `get_mode()`
 

@@ -43,7 +43,6 @@ import RNS.Utilities.rnsh.protocol as protocol
 import enum
 from typing import TypeVar, Generic, Callable, List
 from abc import abstractmethod, ABC
-from multiprocessing import Manager
 import os
 import bz2
 import RNS
@@ -193,11 +192,13 @@ class ListenerSession:
             RNS.log("Identity received from incorrect outlet", RNS.LOG_DEBUG)
             return
 
-        RNS.log(f"initiator_identified {identity} on link {outlet}", RNS.LOG_INFO)
+        RNS.log(f"Initiator identified {identity} on link {outlet}", RNS.LOG_INFO)
         if self.state not in [LSState.LSSTATE_WAIT_IDENT, LSState.LSSTATE_WAIT_VERS]:
             self._protocol_error(LSState.LSSTATE_WAIT_IDENT.name)
+            return
 
         if self.allow_all or identity.hash in self.allowed_identity_hashes or identity.hash in self.allowed_file_identity_hashes:
+            RNS.log(f"Identity {identity} authenticated")
             self.authenticated = True
             self.remote_identity = identity
             self._set_state(LSState.LSSTATE_WAIT_VERS)
@@ -205,6 +206,7 @@ class ListenerSession:
         else:
             self.authenticated = False
             self.terminate("Identity not allowed")
+            RNS.log(f"Identity {identity} not allowed")
 
     @classmethod
     async def pump_all(cls) -> True:
@@ -233,7 +235,7 @@ class ListenerSession:
             chunk_segment = None
 
             chunk_segment = None
-            max_data_len = self.channel.mdu - protocol.StreamDataMessage.OVERHEAD
+            max_data_len = self.channel.mdu - protocol.StreamDataMessage.HEADER_LEN
             while chunk_len > 32 and comp_try < comp_tries:
                 chunk_segment_length = int(chunk_len/comp_try)
                 compressed_chunk = bz2.compress(buf[:chunk_segment_length])
@@ -309,7 +311,8 @@ class ListenerSession:
             self.terminate("Invalid state")
             return
 
-        self.cmdline = self.default_command
+        self.cmdline = []
+        self.cmdline.extend(self.default_command)
         if not self.allow_remote_command and cmdline and len(cmdline) > 0:
             self.terminate("Remote command line not allowed by listener")
             return
@@ -327,6 +330,7 @@ class ListenerSession:
         def stderr(data: bytes): self.stderr_buf.extend(data)
 
         try:
+            RNS.log(f"Remote {self.remote_identity} executing: {self.cmdline}", RNS.LOG_VERBOSE)
             self.process = process.CallbackSubprocess(argv=self.cmdline,
                                                       env={"TERM": self.term or os.environ.get("TERM") or "xterm",
                                                             "RNS_REMOTE_IDENTITY": (RNS.prettyhexrep(self.remote_identity.hash)

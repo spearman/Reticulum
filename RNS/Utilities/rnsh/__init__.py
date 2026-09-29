@@ -35,7 +35,15 @@
 from ._version import __version__
 
 import os
+import glob
 module_abs_filename = os.path.abspath(__file__)
 module_dir = os.path.dirname(module_abs_filename)
+
+py_modules  = glob.glob(os.path.dirname(__file__)+"/*.py")
+pyc_modules = glob.glob(os.path.dirname(__file__)+"/*.pyc")
+so_modules  = glob.glob(os.path.dirname(__file__)+"/*.so")
+pyd_modules = glob.glob(os.path.dirname(__file__)+"/*.pyd")
+modules     = py_modules+pyc_modules+so_modules+pyd_modules
+__all__ = list(set([os.path.basename(f).split(".")[0] for f in modules if not os.path.basename(f).split(".")[0] == "__init__"]))
 
 def _get_version(): return __version__
